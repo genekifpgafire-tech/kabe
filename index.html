@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>年収の壁シミュレーター 2026 | 世帯手取りの変化を可視化</title>
+<meta name="description" content="2026年制度対応。夫の収入と妻の収入を入力すると、年収の壁（106万・110万・130万・136万・169万・178万）による世帯手取りの変化をグラフで確認できます。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F7F4;
+    --card:#FFFFFF;
+    --ink:#1D2B39;        /* 藍鉄 */
+    --indigo:#2C4A6E;     /* 藍 */
+    --indigo-weak:#E4EAF1;
+    --green:#2E6E4E;      /* 手取り曲線（深緑） */
+    --gold:#B8860B;       /* 現在地マーカー（山吹） */
+    --red:#B4432F;        /* 壁・崖（弁柄） */
+    --red-weak:#F6E7E3;
+    --muted:#5D6B77;
+    --line:#D8DEE4;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{font-size:16px}
+  body{
+    font-family:"Noto Sans JP",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.75;
+    font-feature-settings:"palt";
+  }
+  .serif{font-family:"Zen Old Mincho",serif}
+  .num{font-variant-numeric:tabular-nums}
+
+  header{
+    background:var(--indigo);
+    color:#fff;
+    padding:2.4rem 1rem 2.1rem;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:0 1rem}
+  header .wrap{padding:0 1rem}
+  .eyebrow{
+    font-size:.78rem;letter-spacing:.28em;opacity:.85;margin-bottom:.5rem;
+  }
+  h1{
+    font-family:"Zen Old Mincho",serif;
+    font-weight:700;font-size:clamp(1.5rem,4vw,2.2rem);
+    letter-spacing:.06em;line-height:1.4;
+  }
+  header p.lead{margin-top:.6rem;font-size:.9rem;opacity:.9;max-width:44em}
+
+  main{padding:1.6rem 0 3rem}
+  section{margin-top:1.6rem}
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:1.3rem 1.3rem 1.4rem;
+  }
+
+  /* ── 入力パネル ── */
+  .controls{display:grid;gap:1.2rem}
+  @media(min-width:720px){.controls{grid-template-columns:1fr 1fr}}
+  .control label{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-weight:700;font-size:.95rem;margin-bottom:.35rem;
+  }
+  .control label output{
+    font-family:"Zen Old Mincho",serif;font-size:1.35rem;color:var(--indigo);
+  }
+  input[type=range]{
+    width:100%;appearance:none;height:6px;border-radius:3px;
+    background:linear-gradient(to right,var(--indigo) var(--fill,50%),var(--indigo-weak) var(--fill,50%));
+    outline-offset:4px;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    appearance:none;width:22px;height:22px;border-radius:50%;
+    background:#fff;border:3px solid var(--indigo);cursor:grab;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px;height:16px;border-radius:50%;
+    background:#fff;border:3px solid var(--indigo);cursor:grab;
+  }
+  .control small{color:var(--muted);font-size:.78rem}
+
+  fieldset{border:0;margin-top:.4rem}
+  fieldset legend{font-weight:700;font-size:.95rem;margin-bottom:.4rem}
+  .radio-row{display:grid;gap:.5rem}
+  .radio-row label{
+    display:flex;gap:.55rem;align-items:flex-start;
+    border:1px solid var(--line);border-radius:8px;
+    padding:.6rem .75rem;font-size:.85rem;cursor:pointer;background:#fff;
+  }
+  .radio-row label:has(input:checked){
+    border-color:var(--indigo);background:var(--indigo-weak);
+  }
+  .radio-row input{margin-top:.3rem;accent-color:var(--indigo)}
+  .radio-row b{display:block;font-size:.9rem}
+  .radio-row span.desc{color:var(--muted);font-size:.78rem;display:block}
+
+  /* ── グラフ ── */
+  .chart-card{padding:1.1rem .6rem 1rem}
+  .chart-title{
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:.4rem;
+    padding:0 .8rem .4rem;
+  }
+  .chart-title h2{font-family:"Zen Old Mincho",serif;font-size:1.1rem;letter-spacing:.05em}
+  .legend{display:flex;gap:1rem;font-size:.75rem;color:var(--muted);align-items:center;flex-wrap:wrap}
+  .legend i{display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:.3rem;vertical-align:middle}
+  svg{display:block;width:100%;height:auto}
+  .wall-label{font-size:11px;fill:var(--red);letter-spacing:.15em;writing-mode:vertical-rl}
+  .axis-label{font-size:11px;fill:var(--muted)}
+  .tick line{stroke:var(--line)}
+
+  /* ── サマリーカード ── */
+  .summary{display:grid;gap:.8rem;margin-top:1rem}
+  @media(min-width:720px){.summary{grid-template-columns:repeat(4,1fr)}}
+  .stat{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:.85rem 1rem;
+  }
+  .stat .k{font-size:.75rem;color:var(--muted)}
+  .stat .v{
+    font-family:"Zen Old Mincho",serif;font-size:1.4rem;color:var(--ink);
+    font-variant-numeric:tabular-nums;line-height:1.3;
+  }
+  .stat .v small{font-size:.75rem;font-family:"Noto Sans JP",sans-serif;color:var(--muted)}
+
+  .alert{
+    margin-top:1rem;border-radius:var(--radius);padding: .9rem 1.1rem;
+    font-size:.9rem;border:1px solid var(--line);background:#fff;
+  }
+  .alert.warn{border-color:var(--red);background:var(--red-weak);color:#7c2f20}
+  .alert.ok{border-color:var(--green);background:#E9F2ED;color:#1F4A36}
+
+  /* ── 解説 ── */
+  .explain h2{
+    font-family:"Zen Old Mincho",serif;font-size:1.35rem;letter-spacing:.08em;
+    border-left:4px solid var(--indigo);padding-left:.7rem;margin-bottom:1rem;
+  }
+  .explain h3{
+    font-family:"Zen Old Mincho",serif;font-size:1.05rem;margin:1.4rem 0 .4rem;
+    color:var(--indigo);
+  }
+  .explain p{font-size:.92rem;margin-bottom:.6rem}
+  .explain table{
+    width:100%;border-collapse:collapse;font-size:.85rem;margin:.6rem 0 1rem;
+  }
+  .explain th,.explain td{
+    border:1px solid var(--line);padding:.5rem .6rem;text-align:left;vertical-align:top;
+  }
+  .explain th{background:var(--indigo-weak);white-space:nowrap}
+  .explain td:first-child{white-space:nowrap;font-weight:700}
+  .note{font-size:.8rem;color:var(--muted)}
+
+  footer{
+    border-top:1px solid var(--line);padding:1.6rem 0 2.4rem;
+    font-size:.78rem;color:var(--muted);
+  }
+  footer ul{margin:.4rem 0 0 1.2rem}
+  a{color:var(--indigo)}
+  @media(prefers-reduced-motion:no-preference){
+    .marker-group{transition:transform .15s ease-out}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">2026年制度対応・世帯手取りシミュレーション</p>
+    <h1>年収の壁シミュレーター</h1>
+    <p class="lead">夫の年収を固定し、妻（パート等）の年収を動かしたとき、税金と社会保険料によって世帯の手取りがどう変わるかを可視化します。金額はすべて概算です。</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═══ 入力 ═══ -->
+  <section class="card" aria-label="条件の入力">
+    <div class="controls">
+      <div class="control">
+        <label for="husband">夫の年収（給与収入）<output id="husbandOut" class="num">500万円</output></label>
+        <input type="range" id="husband" min="200" max="1300" step="10" value="500">
+        <small>200万〜1,300万円。会社員（社会保険加入）を想定。</small>
+      </div>
+      <div class="control">
+        <label for="wife">妻の年収（給与収入）<output id="wifeOut" class="num">100万円</output></label>
+        <input type="range" id="wife" min="0" max="250" step="1" value="100">
+        <small>0〜250万円。グラフ上の金色のマーカーが現在地です。</small>
+      </div>
+    </div>
+    <fieldset>
+      <legend>妻の社会保険の加入パターン</legend>
+      <div class="radio-row">
+        <label>
+          <input type="radio" name="shaho" value="kinmusaki" checked>
+          <span><b>勤務先の社会保険に加入できる働き方（106万円の壁）</b>
+          <span class="desc">従業員51人以上の企業・週20時間以上などの要件を満たす場合。年収約106万円から健康保険・厚生年金に加入（2026年10月に賃金要件は撤廃予定）。</span></span>
+        </label>
+        <label>
+          <input type="radio" name="shaho" value="fuyou">
+          <span><b>扶養ベースの働き方（130万円の壁）</b>
+          <span class="desc">勤務先の社会保険の対象外の場合。年収130万円以上で夫の扶養から外れ、国民健康保険・国民年金に自分で加入。</span></span>
+        </label>
+      </div>
+    </fieldset>
+  </section>
+
+  <!-- ═══ グラフ ═══ -->
+  <section class="card chart-card" aria-label="世帯手取りのグラフ">
+    <div class="chart-title">
+      <h2>妻の年収と世帯手取りの関係</h2>
+      <div class="legend">
+        <span><i style="background:var(--green)"></i>世帯の手取り</span>
+        <span><i style="background:var(--red);height:10px;opacity:.25"></i>年収の壁</span>
+        <span><i style="background:var(--gold);width:10px;height:10px;border-radius:50%"></i>現在の妻の年収</span>
+      </div>
+    </div>
+    <div id="chart"></div>
+  </section>
+
+  <!-- ═══ サマリー ═══ -->
+  <div class="summary" role="status">
+    <div class="stat"><div class="k">世帯の手取り（年間）</div><div class="v num" id="statTotal">—</div></div>
+    <div class="stat"><div class="k">妻の手取り</div><div class="v num" id="statWife">—</div></div>
+    <div class="stat"><div class="k">妻の税・社会保険料</div><div class="v num" id="statWifeCost">—</div></div>
+    <div class="stat"><div class="k">夫の配偶者（特別）控除</div><div class="v num" id="statDeduction">—</div></div>
+  </div>
+  <div class="alert" id="advice">—</div>
+
+  <!-- ═══ 解説 ═══ -->
+  <section class="card explain">
+    <h2>年収の壁とは（2026年版の概要）</h2>
+    <p>「年収の壁」とは、パート・アルバイトなどで働く人の年収が一定額を超えると、税金や社会保険料の負担が発生・増加し、手取りが減ったり伸びが鈍ったりする境目のことです。税金の壁（所得税・住民税）と社会保険の壁（健康保険・厚生年金）は別の制度で、それぞれ基準額が異なります。2025〜2026年の税制改正・年金制度改正で金額が大きく変わりました。</p>
+
+    <h3>2026年の主な壁一覧</h3>
+    <table>
+      <thead><tr><th>壁</th><th>制度</th><th>超えるとどうなるか</th></tr></thead>
+      <tbody>
+        <tr><td>約110万円</td><td>住民税</td><td>本人に住民税がかかり始める目安（自治体により約100万〜110万円）。負担は小さく、手取りが逆転するほどではありません。</td></tr>
+        <tr><td>106万円</td><td>社会保険</td><td>従業員51人以上の企業で週20時間以上働く場合など、勤務先の健康保険・厚生年金に加入し保険料負担が発生。手取りが一時的に大きく減る最大の「崖」。<b>2026年10月に賃金要件（月8.8万円）は撤廃予定</b>で、以後は金額に関係なく「週20時間以上」で加入対象になります（＝週20時間の壁へ）。企業規模要件も2027年〜2035年にかけて段階的に撤廃されます。</td></tr>
+        <tr><td>130万円</td><td>社会保険</td><td>夫の社会保険の扶養から外れ、勤務先の社会保険に入れない場合は国民健康保険・国民年金に自分で加入。<b>2026年4月から判定は「実際の収入」ではなく労働契約上の収入見込みベースに変更</b>され、一時的な残業などで超えても扶養に残りやすくなりました。</td></tr>
+        <tr><td>136万円</td><td>税（夫側）</td><td>配偶者控除の対象上限。2025年の123万円から2026年分は136万円に引き上げ。超えても次の配偶者特別控除に切り替わるだけで、世帯手取りは急には減りません。</td></tr>
+        <tr><td>169万円</td><td>税（夫側）</td><td>夫が配偶者特別控除を満額（38万円）受けられる妻の年収上限（2025年の160万円から引き上げ）。これを超えると控除が段階的に減り、妻の年収約207万円で控除はゼロになります。夫の年収が1,095万円（所得900万円）を超えると控除額は縮小し、1,195万円（所得1,000万円）超では受けられません。</td></tr>
+        <tr><td>178万円</td><td>税（妻本人）</td><td>妻本人に所得税がかかり始めるライン。かつての「103万円の壁」が2025年分は160万円、<b>2026年分からは178万円</b>に引き上げられました（2026・2027年分の時限措置を含む）。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>なぜ「崖」ができるのか</h3>
+    <p>税金の壁は、超えた分にだけ課税されるため手取りが逆転することはほぼありません。一方、社会保険の壁（106万円・130万円）は、超えた瞬間に年十数万〜数十万円の保険料負担がまとめて発生するため、手取りがガクッと落ちる「崖」になります。このシミュレーターのグラフで段差が見えるのはこのためです。</p>
+
+    <h3>壁を超えるメリット</h3>
+    <p>社会保険に加入すると手取りは一時的に減りますが、将来の厚生年金の受給額が増えるほか、傷病手当金・出産手当金などの保障が受けられるようになります。目先の手取りだけでなく、長期的な保障とのバランスで働き方を考えることが大切です。</p>
+
+    <h3>このシミュレーターの前提（概算モデル）</h3>
+    <p class="note">・2026年（令和8年）分の制度を前提とした簡易計算です。所得税の課税最低限178万円、配偶者控除136万円・配偶者特別控除169万円（満額）などを反映しています。<br>
+    ・社会保険料は給与の約15%（健康保険＋厚生年金＋雇用保険）、国民年金は年約21万円、国民健康保険は所得に応じた概算で計算しています。料率は地域・年齢（40歳以上は介護保険料が加算）・自治体により異なります。<br>
+    ・住民税の非課税ライン、生命保険料控除・iDeCoなどの各種控除、配偶者手当（会社の家族手当）は考慮していません。<br>
+    ・実際の判断にあたっては、税務署・年金事務所・税理士・社会保険労務士等にご確認ください。</p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>本シミュレーターの計算結果は概算であり、正確性を保証するものではありません。制度は今後も変更される可能性があります。</p>
+    <p>主な参考情報：</p>
+    <ul>
+      <li>首相官邸「いわゆる『年収の壁』対策」</li>
+      <li>厚生労働省「『年収の壁』への対応」／「年金制度改正法が成立しました」</li>
+      <li>国税庁「令和7年度税制改正による所得税の基礎控除の見直し等について」／令和8年度税制改正の大綱</li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+"use strict";
+/* =========================================================
+   年収の壁シミュレーター 2026（概算モデル）
+   単位はすべて「万円」。
+   ========================================================= */
+
+/* ---------- 定数（2026年・令和8年分の簡易モデル） ---------- */
+const C = {
+  // 妻（低収入帯）の所得税非課税ライン：178万円（2026年分）
+  WIFE_TAX_FREE: 178,
+  // 妻の給与所得控除の最低保障（2026年分の簡易値）
+  WIFE_SALARY_DED_MIN: 74,
+  // 妻の所得税の基礎控除（給与収入200万円以下の簡易値）
+  WIFE_BASIC_DED: 104,
+  // 住民税：非課税ラインの目安・基礎控除・均等割
+  RESIDENT_TAX_FREE: 110,
+  RESIDENT_SALARY_DED_MIN: 65,
+  RESIDENT_BASIC_DED: 43,
+  RESIDENT_FLAT: 0.5,       // 均等割 約5,000円
+  RESIDENT_RATE: 0.10,
+  // 社会保険（勤務先加入）：給与に対する本人負担の概算料率
+  SHAHO_RATE: 0.15,
+  SHAHO_KABE: 106,          // 勤務先加入パターンの壁
+  FUYOU_KABE: 130,          // 扶養パターンの壁
+  KOKUMIN_NENKIN: 21,       // 国民年金 年額の概算
+  KOKUHO_FLAT: 5.5,         // 国民健康保険 均等割等の概算
+  KOKUHO_RATE: 0.10,        // 国民健康保険 所得割の概算
+  // 配偶者控除・配偶者特別控除（2026年分・所得ベース判定）
+  HAIGUSHA_KOJO_LIMIT: 136, // 配偶者控除の給与収入上限
+  TOKUBETSU_FULL: 169,      // 特別控除が満額の給与収入上限
+  FUKKO_RATE: 1.021,        // 復興特別所得税
+};
+
+/* ---------- 給与所得控除（万円） ---------- */
+function salaryDeduction(income, minDed){
+  if(income <= 190) return Math.min(income, minDed);
+  if(income <= 360) return income * 0.30 + 8;
+  if(income <= 660) return income * 0.20 + 44;
+  if(income <= 850) return income * 0.10 + 110;
+  return 195;
+}
+
+/* ---------- 所得税の累進税率（課税所得→税額、万円） ---------- */
+function progressiveTax(taxable){
+  if(taxable <= 0) return 0;
+  const brackets = [
+    [195, 0.05], [330, 0.10], [695, 0.20], [900, 0.23],
+    [1800, 0.33], [4000, 0.40], [Infinity, 0.45]
+  ];
+  let tax = 0, prev = 0;
+  for(const [cap, rate] of brackets){
+    const slice = Math.min(taxable, cap) - prev;
+    if(slice <= 0) break;
+    tax += slice * rate;
+    prev = cap;
+  }
+  return tax * C.FUKKO_RATE;
+}
+
+/* ---------- 夫の基礎控除（2026年分・合計所得に応じた簡易値） ---------- */
+function basicDeduction(shotoku){
+  if(shotoku <= 132) return 95;
+  if(shotoku <= 336) return 88;
+  if(shotoku <= 489) return 68;
+  if(shotoku <= 655) return 63;
+  return 58;
+}
+
+/* ---------- 配偶者控除・配偶者特別控除（2026年分、万円） ----------
+   妻の合計所得（給与収入 − 給与所得控除）で判定する簡易テーブル。
+   給与換算：所得58万以下 ≒ 年収136万以下（配偶者控除）、
+   所得95万以下 ≒ 年収169万以下（特別控除 満額38万）。 */
+function spouseDeduction(wifeIncome, husbandShotoku){
+  const wifeShotoku = wifeIncome - salaryDeduction(wifeIncome, C.WIFE_SALARY_DED_MIN);
+  let base;
+  if(wifeShotoku <= 58)       base = 38;  // 配偶者控除
+  else if(wifeShotoku <= 95)  base = 38;  // 配偶者特別控除（満額）
+  else if(wifeShotoku <= 100) base = 36;
+  else if(wifeShotoku <= 105) base = 31;
+  else if(wifeShotoku <= 110) base = 26;
+  else if(wifeShotoku <= 115) base = 21;
+  else if(wifeShotoku <= 120) base = 16;
+  else if(wifeShotoku <= 125) base = 11;
+  else if(wifeShotoku <= 130) base = 6;
+  else if(wifeShotoku <= 133) base = 3;
+  else base = 0;
+  // 夫の所得による縮小（900万超〜950万：2/3、950万超〜1,000万：1/3、1,000万超：0）
+  if(husbandShotoku > 1000) return 0;
+  if(husbandShotoku > 950)  return Math.round(base * (13/38) * 10) / 10;
+  if(husbandShotoku > 900)  return Math.round(base * (26/38) * 10) / 10;
+  return base;
+}
+
+/* ---------- 妻の社会保険料（万円） ---------- */
+function wifeShaho(wifeIncome, mode){
+  if(mode === "kinmusaki"){
+    return wifeIncome >= C.SHAHO_KABE ? wifeIncome * C.SHAHO_RATE : 0;
+  }
+  // 扶養パターン：130万円以上で国保＋国民年金
+  if(wifeIncome >= C.FUYOU_KABE){
+    const shotoku = Math.max(0, wifeIncome - salaryDeduction(wifeIncome, C.RESIDENT_SALARY_DED_MIN));
+    const kokuho = C.KOKUHO_FLAT + Math.max(0, shotoku - C.RESIDENT_BASIC_DED) * C.KOKUHO_RATE;
+    return C.KOKUMIN_NENKIN + kokuho;
+  }
+  return 0;
+}
+
+/* ---------- 妻の税金（所得税＋住民税、万円） ---------- */
+function wifeTax(wifeIncome, shaho){
+  // 所得税：非課税ライン178万円（社会保険料控除も反映）
+  const shotoku = Math.max(0, wifeIncome - salaryDeduction(wifeIncome, C.WIFE_SALARY_DED_MIN));
+  const taxableIT = Math.max(0, shotoku - C.WIFE_BASIC_DED - shaho);
+  const incomeTax = progressiveTax(taxableIT);
+  // 住民税：非課税ライン約110万円
+  let residentTax = 0;
+  if(wifeIncome > C.RESIDENT_TAX_FREE){
+    const shotokuR = Math.max(0, wifeIncome - salaryDeduction(wifeIncome, C.RESIDENT_SALARY_DED_MIN));
+    const taxableR = Math.max(0, shotokuR - C.RESIDENT_BASIC_DED - shaho);
+    residentTax = taxableR * C.RESIDENT_RATE + C.RESIDENT_FLAT;
+  }
+  return incomeTax + residentTax;
+}
+
+/* ---------- 夫の手取り（万円） ---------- */
+function husbandNet(husbandIncome, wifeIncome){
+  const shaho = husbandIncome * C.SHAHO_RATE;
+  const shotoku = husbandIncome - salaryDeduction(husbandIncome, C.RESIDENT_SALARY_DED_MIN);
+  const spouseDed = spouseDeduction(wifeIncome, shotoku);
+  // 所得税
+  const taxableIT = Math.max(0, shotoku - shaho - basicDeduction(shotoku) - spouseDed);
+  const incomeTax = progressiveTax(taxableIT);
+  // 住民税（配偶者控除は最大33万円）
+  const spouseDedR = Math.min(spouseDed, 33);
+  const taxableR = Math.max(0, shotoku - shaho - C.RESIDENT_BASIC_DED - spouseDedR);
+  const residentTax = taxableR * C.RESIDENT_RATE + C.RESIDENT_FLAT;
+  return { net: husbandIncome - shaho - incomeTax - residentTax, spouseDed };
+}
+
+/* ---------- 世帯の手取り（万円） ---------- */
+function householdNet(husbandIncome, wifeIncome, mode){
+  const shaho = wifeShaho(wifeIncome, mode);
+  const tax = wifeTax(wifeIncome, shaho);
+  const wifeNet = wifeIncome - shaho - tax;
+  const h = husbandNet(husbandIncome, wifeIncome);
+  return { total: h.net + wifeNet, wifeNet, wifeCost: shaho + tax, spouseDed: h.spouseDed };
+}
+
+/* =========================================================
+   描画
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const husbandEl = $("husband"), wifeEl = $("wife");
+const fmt = v => v.toLocaleString("ja-JP", {maximumFractionDigits: 1});
+
+function wallsFor(mode){
+  const walls = [];
+  if(mode === "kinmusaki") walls.push({x:106, label:"一〇六万の壁", sub:"社会保険"});
+  else walls.push({x:130, label:"一三〇万の壁", sub:"社会保険"});
+  walls.push({x:110, label:"住民税", sub:"", minor:true});
+  walls.push({x:136, label:"配偶者控除", sub:"", minor:true});
+  walls.push({x:169, label:"特別控除 満額", sub:"", minor:true});
+  walls.push({x:178, label:"一七八万の壁", sub:"所得税"});
+  return walls;
+}
+
+function drawChart(){
+  const H = +husbandEl.value, W = +wifeEl.value;
+  const mode = document.querySelector('input[name="shaho"]:checked').value;
+
+  // 曲線データ（0.5万円刻み）
+  const pts = [];
+  for(let x = 0; x <= 250; x += 0.5){
+    pts.push([x, householdNet(H, x, mode).total]);
+  }
+  const yVals = pts.map(p => p[1]);
+  const yMin = Math.floor(Math.min(...yVals) / 20) * 20 - 10;
+  const yMax = Math.ceil(Math.max(...yVals) / 20) * 20 + 10;
+
+  // 座標系
+  const vw = 900, vh = 460, mL = 62, mR = 20, mT = 18, mB = 44;
+  const px = x => mL + (x / 250) * (vw - mL - mR);
+  const py = y => mT + (1 - (y - yMin) / (yMax - yMin)) * (vh - mT - mB);
+
+  let s = `<svg viewBox="0 0 ${vw} ${vh}" role="img" aria-label="妻の年収に対する世帯手取りの折れ線グラフ">`;
+
+  // Y軸グリッド
+  const yStep = (yMax - yMin) > 120 ? 40 : 20;
+  for(let y = Math.ceil(yMin/yStep)*yStep; y <= yMax; y += yStep){
+    s += `<line x1="${mL}" x2="${vw-mR}" y1="${py(y)}" y2="${py(y)}" stroke="var(--line)" stroke-width="1"/>`;
+    s += `<text class="axis-label" x="${mL-8}" y="${py(y)+4}" text-anchor="end">${y}</text>`;
+  }
+  s += `<text class="axis-label" x="${mL-8}" y="${mT-4}" text-anchor="end">万円</text>`;
+
+  // X軸目盛り
+  for(let x = 0; x <= 250; x += 50){
+    s += `<line x1="${px(x)}" x2="${px(x)}" y1="${vh-mB}" y2="${vh-mB+5}" stroke="var(--muted)"/>`;
+    s += `<text class="axis-label" x="${px(x)}" y="${vh-mB+20}" text-anchor="middle">${x}</text>`;
+  }
+  s += `<text class="axis-label" x="${(mL+vw-mR)/2}" y="${vh-6}" text-anchor="middle">妻の年収（万円）</text>`;
+
+  // 壁（縦帯＋縦書きラベル）
+  for(const w of wallsFor(mode)){
+    const x = px(w.x);
+    const wWidth = w.minor ? 2 : 6;
+    s += `<rect x="${x - wWidth/2}" y="${mT}" width="${wWidth}" height="${vh-mT-mB}" fill="var(--red)" opacity="${w.minor ? 0.18 : 0.22}"/>`;
+    s += `<text class="wall-label" x="${x + (w.minor ? 8 : 11)}" y="${mT + 8}" opacity="${w.minor ? 0.75 : 1}">${w.label}${w.sub ? "・" + w.sub : ""}</text>`;
+  }
+
+  // 手取り曲線
+  let d = "";
+  pts.forEach(([x, y], i) => { d += (i ? "L" : "M") + px(x).toFixed(1) + " " + py(y).toFixed(1); });
+  s += `<path d="${d}" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linejoin="round"/>`;
+
+  // 現在地マーカー
+  const cur = householdNet(H, W, mode).total;
+  s += `<g class="marker-group">
+    <line x1="${px(W)}" x2="${px(W)}" y1="${py(cur)}" y2="${vh-mB}" stroke="var(--gold)" stroke-dasharray="4 3" stroke-width="1.5"/>
+    <circle cx="${px(W)}" cy="${py(cur)}" r="7" fill="var(--gold)" stroke="#fff" stroke-width="2.5"/>
+    <text x="${px(W)}" y="${py(cur)-14}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">${fmt(cur)}万円</text>
+  </g>`;
+
+  s += `</svg>`;
+  $("chart").innerHTML = s;
+
+  // サマリー
+  const r = householdNet(H, W, mode);
+  $("statTotal").innerHTML = `${fmt(r.total)}<small> 万円</small>`;
+  $("statWife").innerHTML = `${fmt(r.wifeNet)}<small> 万円</small>`;
+  $("statWifeCost").innerHTML = `${fmt(r.wifeCost)}<small> 万円</small>`;
+  $("statDeduction").innerHTML = `${fmt(r.spouseDed)}<small> 万円</small>`;
+
+  // アドバイス（社会保険の崖との位置関係）
+  const kabe = mode === "kinmusaki" ? C.SHAHO_KABE : C.FUYOU_KABE;
+  const advice = $("advice");
+  const before = householdNet(H, kabe - 0.5, mode).total;
+  const after  = householdNet(H, kabe, mode).total;
+  const drop = before - after;
+  if(W < kabe){
+    advice.className = "alert warn";
+    advice.innerHTML = `現在の年収は社会保険の壁（<b>${kabe}万円</b>）まであと <b class="num">${fmt(kabe - W)}万円</b>。壁を超えた直後は世帯手取りが約 <b class="num">${fmt(drop)}万円</b> 減ります。超えるなら、手取りが回復する水準（グラフの段差より右で元の高さに戻る点）までしっかり働くのが得策です。`;
+  }else{
+    // 崖の手前の手取りを回復する年収を探索
+    let recover = null;
+    for(let x = kabe; x <= 250; x += 1){
+      if(householdNet(H, x, mode).total >= before){ recover = x; break; }
+    }
+    advice.className = "alert ok";
+    advice.innerHTML = recover
+      ? `社会保険の壁（${kabe}万円）を超えて働いています。壁の手前の世帯手取りを取り戻せるのは妻の年収 <b class="num">約${recover}万円</b> 以上。社会保険に加入すると将来の年金や傷病手当金などの保障も手厚くなります。`
+      : `社会保険の壁（${kabe}万円）を超えて働いています。社会保険に加入すると将来の年金や傷病手当金などの保障も手厚くなります。`;
+  }
+}
+
+/* ---------- イベント ---------- */
+function syncSlider(el, out, unit){
+  const v = +el.value;
+  out.textContent = v.toLocaleString("ja-JP") + unit;
+  const p = ((v - el.min) / (el.max - el.min)) * 100;
+  el.style.setProperty("--fill", p + "%");
+}
+function update(){
+  syncSlider(husbandEl, $("husbandOut"), "万円");
+  syncSlider(wifeEl, $("wifeOut"), "万円");
+  drawChart();
+}
+husbandEl.addEventListener("input", update);
+wifeEl.addEventListener("input", update);
+document.querySelectorAll('input[name="shaho"]').forEach(el => el.addEventListener("change", update));
+update();
+</script>
+</body>
+</html>
